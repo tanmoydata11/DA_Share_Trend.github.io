@@ -8,11 +8,12 @@ Generates dashboard_data.json for HTML pages
 import pandas as pd
 import json
 from datetime import datetime
+import os
 
 # Configuration
 EXCEL_FILE = 'Stock_Tracker_Fixed.xlsx'
 CONFIG_FILE = 'stocks_config.json'
-OUTPUT_FILE = '/home/claude/dashboard_data.json'
+OUTPUT_FILE = 'dashboard_data.json'  # Save in current directory
 
 
 def load_config():
@@ -287,9 +288,9 @@ def save_dashboard_data(analysis, config):
         'insights': insights['list']
     }
     
-    # Save to JSON
-    with open(OUTPUT_FILE, 'w') as f:
-        json.dump(output, f, indent=2)
+    # Save to JSON in current directory
+    with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
+        json.dump(output, f, indent=2, ensure_ascii=False)
     
     print(f"✓ Dashboard data saved!")
     return output
@@ -344,6 +345,8 @@ def main():
     
     # Step 3: Analyze
     analysis = analyze_latest_day(df, config)
+    if not analysis:
+        return
     
     # Step 4: Save dashboard data
     data = save_dashboard_data(analysis, config)
