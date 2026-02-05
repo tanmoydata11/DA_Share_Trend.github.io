@@ -512,15 +512,29 @@ def analyze_sector_time_series(df, config):
     last_7_dates = all_dates[-7:]
     last_30_dates = all_dates[-30:] if len(all_dates) >= 30 else all_dates
     
-    # Group stocks by sector
+    # Get available stock columns (remove .NS suffix to match DataFrame columns)
+    stock_symbols = [s['symbol'].replace('.NS', '') for s in config['stocks']]
+    available_stocks = [col for col in df.columns if col in stock_symbols]
+    
+    print(f"   Available stocks in DataFrame: {len(available_stocks)}")
+    print(f"   Analyzing last {len(last_7_dates)} days for 7-day trend")
+    print(f"   Analyzing last {len(last_30_dates)} days for 1-month trend")
+    
+    # Group stocks by sector (using column names)
     sector_stocks = {}
     for stock_config in config['stocks']:
         sector = stock_config.get('sector', 'Unknown')
-        stock_name = stock_config['symbol']
+        stock_name = stock_config['symbol'].replace('.NS', '')  # Remove .NS to match DataFrame
         
-        if sector not in sector_stocks:
-            sector_stocks[sector] = []
-        sector_stocks[sector].append(stock_name)
+        # Only add if stock exists in DataFrame
+        if stock_name in available_stocks:
+            if sector not in sector_stocks:
+                sector_stocks[sector] = []
+            sector_stocks[sector].append(stock_name)
+    
+    print(f"   Found {len(sector_stocks)} sectors:")
+    for sector, stocks in sector_stocks.items():
+        print(f"      {sector}: {len(stocks)} stocks")
     
     # Calculate 7-day performance
     seven_day_performance = {}
@@ -549,25 +563,30 @@ def analyze_sector_time_series(df, config):
             daily_changes.append(avg_change)
         
         seven_day_performance[sector] = {
-            'dates': [str(d) for d in last_7_dates],
+            'dates': [d.strftime('%d-%m-%Y') if isinstance(d, pd.Timestamp) else str(d) for d in last_7_dates],
             'daily_changes': daily_changes,
             'total_change': round(sum(daily_changes), 2),
             'avg_change': round(sum(daily_changes) / len(daily_changes), 2) if daily_changes else 0
         }
+        
+        print(f"      {sector}: Total change = {seven_day_performance[sector]['total_change']}%")
     
     # Calculate 1-month performance with best/worst stocks
+    print(f"\n   Calculating 1-month performance...")
     one_month_performance = {}
     for sector, stocks in sector_stocks.items():
         sector_stock_performance = []
         
         for stock_name in stocks:
             if stock_name in df.columns:
-                # Get first and last price in the month
-                month_data = df[df['Date'].isin(last_30_dates)][stock_name].dropna()
+                # Get data for the month period
+                month_df = df[df['Date'].isin(last_30_dates)]
+                stock_data = month_df[stock_name].dropna()
                 
-                if len(month_data) >= 2:
-                    first_price = month_data.iloc[0]
-                    last_price = month_data.iloc[-1]
+                if len(stock_data) >= 2:
+                    # Get first and last available price
+                    first_price = stock_data.iloc[0]
+                    last_price = stock_data.iloc[-1]
                     
                     if first_price > 0:
                         change = last_price - first_price
@@ -591,6 +610,10 @@ def analyze_sector_time_series(df, config):
                 'worst_loser': sorted_perf[-1],
                 'avg_change': round(sum(s['change_pct'] for s in sector_stock_performance) / len(sector_stock_performance), 2)
             }
+            
+            print(f"      {sector}: Best={sorted_perf[0]['name']} (+{sorted_perf[0]['change_pct']}%), Worst={sorted_perf[-1]['name']} ({sorted_perf[-1]['change_pct']}%)")
+    
+    print(f"   ✓ Sector time series analysis complete")
     
     return {
         'seven_day': seven_day_performance,
